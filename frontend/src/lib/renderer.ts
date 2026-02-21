@@ -4,7 +4,7 @@ import type { RaceFrame } from "./types"
 import { generateMockRaceData } from "./mockData"
 import { ReplayController } from "./replayController"
 
-export async function initRenderer(container: HTMLDivElement): Promise<Application> {
+export async function initRenderer(container: HTMLDivElement): Promise<{ app: Application; replay: ReplayController }> {
   const app = new PIXI.Application()
 
   await app.init({
@@ -52,7 +52,19 @@ export async function initRenderer(container: HTMLDivElement): Promise<Applicati
     }
 
     const car = new PIXI.Graphics()
-    car.circle(0, 0, 8).fill(driverCode === "VER" ? 0x1e90ff : 0xff0000)
+
+    const color = driverCode === "VER" ? 0x1e90ff : 0xff0000
+
+    // Draw simple arrow-like car
+    car
+      .moveTo(12, 0)        // front tip
+      .lineTo(-8, 6)
+      .lineTo(-4, 0)
+      .lineTo(-8, -6)
+      .closePath()
+      .fill(color)
+
+    car.pivot.set(0, 0)
 
     app.stage.addChild(car)
     carMap.set(driverCode, car)
@@ -69,6 +81,7 @@ export async function initRenderer(container: HTMLDivElement): Promise<Applicati
       const car = ensureCar(driverCode)
 
       car.position.set(centerX + state.x, centerY + state.y)
+      car.rotation = state.heading
     }
   }
 
@@ -81,5 +94,5 @@ export async function initRenderer(container: HTMLDivElement): Promise<Applicati
     }
   })
 
-  return app
+  return { app, replay }
 }

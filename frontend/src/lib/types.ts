@@ -3,6 +3,7 @@ export type DriverState = {
   y: number
   speed: number
   drs: boolean
+  heading: number
 }
 
 export type RaceFrame = {

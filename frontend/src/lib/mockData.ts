@@ -21,12 +21,14 @@ export function generateMockRaceData(): RaceData {
         y: Math.sin(angle1) * radiusY,
         speed: 300,
         drs: false,
+        heading: angle1 + Math.PI / 2,
       },
       HAM: {
         x: Math.cos(angle2) * radiusX,
         y: Math.sin(angle2) * radiusY,
         speed: 295,
         drs: false,
+        heading: angle2 + Math.PI / 2,  
       },
     })
   }
