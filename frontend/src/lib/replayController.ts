@@ -78,7 +78,7 @@ export class ReplayController {
       const y = a.y + (b.y - a.y) * alpha
       const dx = b.x - a.x
       const dy = b.y - a.y
-      const heading = Math.atan2(dy, dx)
+      const heading = (dx !== 0 || dy !== 0) ? Math.atan2(dy, dx) : a.heading
 
       interpolated[driverCode] = {
         x,

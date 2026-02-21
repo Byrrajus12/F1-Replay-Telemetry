@@ -7,7 +7,13 @@ import type { ReplayController } from "@/lib/replayController"
 
 export default function Home() {
   const containerRef = useRef<HTMLDivElement>(null)
+
   const [replay, setReplay] = useState<ReplayController | null>(null)
+  const [resetCamera, setResetCamera] = useState<(() => void) | null>(null)
+  const [setFollowDriver, setSetFollowDriver] = useState<
+    ((driver: string | null) => void) | null
+  >(null)
+
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
 
@@ -20,6 +26,8 @@ export default function Home() {
       const result = await initRenderer(containerRef.current!)
       app = result.app
       setReplay(result.replay)
+      setResetCamera(() => result.resetCamera)
+      setSetFollowDriver(() => result.setFollowDriver)
       setDuration(result.replay.getDuration())
     }
 
@@ -30,20 +38,20 @@ export default function Home() {
     }
   }, [])
 
-  // Sync UI time while playing
+  // Sync timeline
   useEffect(() => {
     if (!replay) return
 
-    let animationId: number
+    let id: number
 
-    const updateTime = () => {
+    const loop = () => {
       setCurrentTime(replay.getCurrentTime())
-      animationId = requestAnimationFrame(updateTime)
+      id = requestAnimationFrame(loop)
     }
 
-    updateTime()
+    loop()
 
-    return () => cancelAnimationFrame(animationId)
+    return () => cancelAnimationFrame(id)
   }, [replay])
 
   return (
@@ -64,8 +72,8 @@ export default function Home() {
           borderRadius: "12px",
           display: "flex",
           flexDirection: "column",
-          gap: "8px",
-          minWidth: "400px",
+          gap: "10px",
+          minWidth: "420px",
         }}
       >
         <input
@@ -85,6 +93,7 @@ export default function Home() {
           <button onClick={() => replay?.play()}>Play</button>
           <button onClick={() => replay?.pause()}>Pause</button>
           <button onClick={() => replay?.restart()}>Restart</button>
+          <button onClick={() => resetCamera?.()}>Reset Camera</button>
 
           <select
             defaultValue="1"
@@ -98,6 +107,16 @@ export default function Home() {
             <option value="2">2x</option>
             <option value="4">4x</option>
           </select>
+
+          <button onClick={() => setFollowDriver?.("VER")}>
+            Follow VER
+          </button>
+          <button onClick={() => setFollowDriver?.("HAM")}>
+            Follow HAM
+          </button>
+          <button onClick={() => setFollowDriver?.(null)}>
+            Free Cam
+          </button>
         </div>
       </div>
     </>
