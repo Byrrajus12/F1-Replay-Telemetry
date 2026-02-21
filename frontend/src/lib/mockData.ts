@@ -8,29 +8,45 @@ export function generateMockRaceData(): RaceData {
   const radiusX = 300
   const radiusY = 200
 
+  // Speed affects angular velocity (track circumference ~= 2π * avg radius)
+  // Base speed 300 km/h → base angular velocity
+  const baseSpeed = 300
+  const baseAngularVelocity = 0.8 // radians per second
+  
+  const verSpeed = 340
+  const hamSpeed = 220 // HAM is slower
+  
+  const verAngularVelocity = baseAngularVelocity * (verSpeed / baseSpeed)
+  const hamAngularVelocity = baseAngularVelocity * (hamSpeed / baseSpeed)
+
   const frames: RaceFrame[] = []
+  
+  let verAngle = 0
+  let hamAngle = Math.PI // Start on opposite side
 
   for (let i = 0; i < totalFrames; i++) {
-    const t = i / fps
-    const angle1 = t * 0.8
-    const angle2 = t * 0.8 + Math.PI
-
+    const dt = 1 / fps
+    
     frames.push({
       VER: {
-        x: Math.cos(angle1) * radiusX,
-        y: Math.sin(angle1) * radiusY,
-        speed: 300,
+        x: Math.cos(verAngle) * radiusX,
+        y: Math.sin(verAngle) * radiusY,
+        speed: verSpeed,
         drs: false,
-        heading: angle1 + Math.PI / 2,
+        heading: verAngle + Math.PI / 2,
       },
       HAM: {
-        x: Math.cos(angle2) * radiusX,
-        y: Math.sin(angle2) * radiusY,
-        speed: 295,
+        x: Math.cos(hamAngle) * radiusX,
+        y: Math.sin(hamAngle) * radiusY,
+        speed: hamSpeed,
         drs: false,
-        heading: angle2 + Math.PI / 2,  
+        heading: hamAngle + Math.PI / 2,  
       },
     })
+    
+    // Update angles based on speed
+    verAngle += verAngularVelocity * dt
+    hamAngle += hamAngularVelocity * dt
   }
 
   return { fps, duration, frames }

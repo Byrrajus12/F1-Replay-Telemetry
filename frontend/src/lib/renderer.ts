@@ -3,6 +3,7 @@ import type { Application } from "pixi.js"
 import type { RaceFrame } from "./types"
 import { generateMockRaceData } from "./mockData"
 import { ReplayController } from "./replayController"
+import { RankingEngine } from "./rankingEngine"
 
 export async function initRenderer(
   container: HTMLDivElement
@@ -37,15 +38,15 @@ export async function initRenderer(
 
   world.addChild(track)
 
-
   // REPLAY
-
   const raceData = generateMockRaceData()
   const replay = new ReplayController(raceData)
   replay.play()
 
-  // CARS
+  // RANKING ENGINE
+  const ranking = new RankingEngine()
 
+  // CARS
   const carMap = new Map<string, PIXI.Graphics>()
 
   function ensureCar(driverCode: string): PIXI.Graphics {
@@ -198,6 +199,16 @@ export async function initRenderer(
 
     renderFrame(frame)
 
+    // RANKING UPDATE
+    ranking.update(frame)
+
+    const order = ranking.getOrder()
+    const overtakes = ranking.getOvertakes()
+
+    if (overtakes.length > 0) {
+      console.log("Overtakes:", overtakes)
+    }
+
     if (followDriver && frame[followDriver]) {
       const state = frame[followDriver]
 
@@ -209,7 +220,6 @@ export async function initRenderer(
 
     clampCamera()
 
-    // Smooth camera lerp
     world.position.x += (targetX - world.position.x) * lerpFactor
     world.position.y += (targetY - world.position.y) * lerpFactor
   })
