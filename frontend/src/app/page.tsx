@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import type { Application } from "pixi.js"
 import { initRenderer } from "@/lib/renderer"
 import type { ReplayController } from "@/lib/replayController"
+import { Leaderboard } from "@/components/Leaderboard"
 
 export default function Home() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -16,6 +17,10 @@ export default function Home() {
 
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  
+  const [rankingOrder, setRankingOrder] = useState<string[]>([])
+  const [previousRankingOrder, setPreviousRankingOrder] = useState<string[]>([])
+  const currentRankingRef = useRef<string[]>([])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -23,7 +28,14 @@ export default function Home() {
     let app: Application | null = null
 
     const setup = async () => {
-      const result = await initRenderer(containerRef.current!)
+      const result = await initRenderer(
+        containerRef.current!,
+        (order) => {
+          setPreviousRankingOrder(currentRankingRef.current)
+          currentRankingRef.current = order
+          setRankingOrder(order)
+        }
+      )
       app = result.app
       setReplay(result.replay)
       setResetCamera(() => result.resetCamera)
@@ -60,6 +72,13 @@ export default function Home() {
         ref={containerRef}
         style={{ width: "100%", height: "100vh" }}
       />
+
+      {rankingOrder.length > 0 && (
+        <Leaderboard 
+          order={rankingOrder} 
+          previousOrder={previousRankingOrder}
+        />
+      )}
 
       <div
         style={{

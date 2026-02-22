@@ -6,7 +6,8 @@ import { ReplayController } from "./replayController"
 import { RankingEngine } from "./rankingEngine"
 
 export async function initRenderer(
-  container: HTMLDivElement
+  container: HTMLDivElement,
+  onRankingUpdate?: (order: string[]) => void
 ): Promise<{
   app: Application
   replay: ReplayController
@@ -48,6 +49,10 @@ export async function initRenderer(
 
   // CARS
   const carMap = new Map<string, PIXI.Graphics>()
+  
+  // OVERTAKE FLASH TRACKING
+  const flashTimers = new Map<string, number>()
+  const FLASH_DURATION = 0.4 // seconds
 
   function ensureCar(driverCode: string): PIXI.Graphics {
     if (carMap.has(driverCode)) {
@@ -71,13 +76,30 @@ export async function initRenderer(
     return car
   }
 
-  function renderFrame(frame: RaceFrame) {
+  function renderFrame(frame: RaceFrame, deltaSeconds: number) {
     for (const driverCode in frame) {
       const state = frame[driverCode]
       const car = ensureCar(driverCode)
 
       car.position.set(state.x, state.y)
       car.rotation = state.heading
+      
+      // Update flash effect
+      const flashTimer = flashTimers.get(driverCode)
+      if (flashTimer !== undefined && flashTimer > 0) {
+        const newTimer = flashTimer - deltaSeconds
+        flashTimers.set(driverCode, newTimer)
+        
+        // Calculate fade out intensity (1.0 to 0.0)
+        const intensity = Math.max(0, newTimer / FLASH_DURATION)
+        
+        // Subtle white tint (blend with original color)
+        car.tint = 0xffffff
+        car.alpha = 0.7 + (intensity * 0.3) // Subtle pulse from 0.7 to 1.0
+      } else {
+        car.tint = 0xffffff
+        car.alpha = 1.0
+      }
     }
   }
 
@@ -197,17 +219,26 @@ export async function initRenderer(
 
     if (!frame) return
 
-    renderFrame(frame)
-
     // RANKING UPDATE
     ranking.update(frame)
 
     const order = ranking.getOrder()
     const overtakes = ranking.getOvertakes()
 
+    // Send ranking to React
+    if (onRankingUpdate) {
+      onRankingUpdate(order)
+    }
+
+    // Trigger flash on overtakes
     if (overtakes.length > 0) {
       console.log("Overtakes:", overtakes)
+      overtakes.forEach(({ overtaken }) => {
+        flashTimers.set(overtaken, FLASH_DURATION)
+      })
     }
+
+    renderFrame(frame, deltaSeconds)
 
     if (followDriver && frame[followDriver]) {
       const state = frame[followDriver]
