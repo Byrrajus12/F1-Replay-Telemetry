@@ -6,6 +6,29 @@ import { generateMockRaceData } from "./mockData"
 import { ReplayController } from "./replayController"
 import { RankingEngine } from "./rankingEngine"
 
+// TEAMS REGISTRY
+const TEAMS_REGISTRY: Record<string, { textureFile: string; scale: number }> = {
+  redbull: { textureFile: "/redbull2025.png", scale: 0.45 },
+  mercedes: { textureFile: "/mercedes2025.png", scale: 0.45 },
+  ferrari: { textureFile: "/ferrari2025.png", scale: 0.45 },
+}
+
+const DRIVER_TEAMS: Record<string, string> = {
+  VER: "redbull",
+  HAM: "mercedes",
+  LEC: "ferrari",
+}
+
+// LOADED TEXTURES
+const TEAM_TEXTURES: Record<string, PIXI.Texture> = {}
+
+// Initialize team textures
+async function initializeTeams(): Promise<void> {
+  for (const [teamKey, config] of Object.entries(TEAMS_REGISTRY)) {
+    TEAM_TEXTURES[teamKey] = await Assets.load(config.textureFile)
+  }
+}
+
 export async function initRenderer(
   container: HTMLDivElement,
   onRankingUpdate?: (order: string[]) => void
@@ -25,9 +48,8 @@ export async function initRenderer(
 
   container.appendChild(app.canvas)
 
-  // Preload textures
-  const redbullTexture = await Assets.load("/redbull2025.png")
-  const mercedesTexture = await Assets.load("/mercedes2025.png")
+  // Initialize team registry
+  await initializeTeams()
 
   // WORLD CONTAINER
   const world = new PIXI.Container()
@@ -65,15 +87,15 @@ export async function initRenderer(
       return carMap.get(driverCode)!
     }
 
-    const texture =
-      driverCode === "VER"
-        ? redbullTexture
-        : mercedesTexture
+    // Data-driven: look up team from registry
+    const teamKey = DRIVER_TEAMS[driverCode] || "mercedes" // fallback to mercedes
+    const texture = TEAM_TEXTURES[teamKey]
+    const scale = TEAMS_REGISTRY[teamKey].scale
 
     const sprite = new Sprite(texture)
 
     sprite.anchor.set(0.5)
-    sprite.scale.set(0.45)
+    sprite.scale.set(scale)
     sprite.roundPixels = true
 
     world.addChild(sprite)
