@@ -1,5 +1,6 @@
 import * as PIXI from "pixi.js"
 import type { Application } from "pixi.js"
+import { Assets, Sprite } from "pixi.js"
 import type { RaceFrame } from "./types"
 import { generateMockRaceData } from "./mockData"
 import { ReplayController } from "./replayController"
@@ -23,6 +24,10 @@ export async function initRenderer(
   })
 
   container.appendChild(app.canvas)
+
+  // Preload textures
+  const redbullTexture = await Assets.load("/redbull2025.png")
+  const mercedesTexture = await Assets.load("/mercedes2025.png")
 
   // WORLD CONTAINER
   const world = new PIXI.Container()
@@ -48,32 +53,33 @@ export async function initRenderer(
   const ranking = new RankingEngine()
 
   // CARS
-  const carMap = new Map<string, PIXI.Graphics>()
-  
+  const carMap = new Map<string, Sprite>()
+  const SPRITE_ROTATION_OFFSET = Math.PI / 2
+
   // OVERTAKE FLASH TRACKING
   const flashTimers = new Map<string, number>()
   const FLASH_DURATION = 0.4 // seconds
 
-  function ensureCar(driverCode: string): PIXI.Graphics {
+  function ensureCar(driverCode: string): Sprite {
     if (carMap.has(driverCode)) {
       return carMap.get(driverCode)!
     }
 
-    const car = new PIXI.Graphics()
-    const color = driverCode === "VER" ? 0x1e90ff : 0xff0000
+    const texture =
+      driverCode === "VER"
+        ? redbullTexture
+        : mercedesTexture
 
-    car
-      .moveTo(14, 0)
-      .lineTo(-10, 7)
-      .lineTo(-5, 0)
-      .lineTo(-10, -7)
-      .closePath()
-      .fill(color)
+    const sprite = new Sprite(texture)
 
-    world.addChild(car)
-    carMap.set(driverCode, car)
+    sprite.anchor.set(0.5)
+    sprite.scale.set(0.45)
+    sprite.roundPixels = true
 
-    return car
+    world.addChild(sprite)
+    carMap.set(driverCode, sprite)
+
+    return sprite
   }
 
   function renderFrame(frame: RaceFrame, deltaSeconds: number) {
@@ -82,7 +88,7 @@ export async function initRenderer(
       const car = ensureCar(driverCode)
 
       car.position.set(state.x, state.y)
-      car.rotation = state.heading
+      car.rotation = state.heading + SPRITE_ROTATION_OFFSET
       
       // Update flash effect
       const flashTimer = flashTimers.get(driverCode)
@@ -232,7 +238,6 @@ export async function initRenderer(
 
     // Trigger flash on overtakes
     if (overtakes.length > 0) {
-      console.log("Overtakes:", overtakes)
       overtakes.forEach(({ overtaken }) => {
         flashTimers.set(overtaken, FLASH_DURATION)
       })
@@ -243,10 +248,8 @@ export async function initRenderer(
     if (followDriver && frame[followDriver]) {
       const state = frame[followDriver]
 
-      targetX =
-        app.screen.width / 2 - state.x * zoom
-      targetY =
-        app.screen.height / 2 - state.y * zoom
+      targetX = app.screen.width / 2 - state.x * zoom
+      targetY = app.screen.height / 2 - state.y * zoom
     }
 
     clampCamera()
