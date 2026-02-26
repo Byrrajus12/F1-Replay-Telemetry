@@ -7,6 +7,7 @@ type DriverProgress = {
 
 type DriverState = {
   lastAngle: number
+  lastDistance: number
   totalProgress: number
 }
 
@@ -14,6 +15,15 @@ export class RankingEngine {
   private previousOrder: string[] = []
   private currentOrder: string[] = []
   private driverStates: Map<string, DriverState> = new Map()
+  private trackLength: number
+
+  constructor(trackLength: number) {
+    this.trackLength = trackLength
+  }
+
+  setTrackLength(trackLength: number) {
+    this.trackLength = trackLength
+  }
 
   update(frame: RaceFrame) {
     const progresses: DriverProgress[] = []
@@ -21,7 +31,10 @@ export class RankingEngine {
     for (const driver in frame) {
       const state = frame[driver]
 
-      // Compute current angle
+      const distance = state.distance
+      const hasDistance = Number.isFinite(distance) && this.trackLength > 0
+
+      // Compute current angle for fallback
       let angle = Math.atan2(state.y, state.x)
 
       // Normalize to 0 → 2π
@@ -32,25 +45,46 @@ export class RankingEngine {
       // Get or initialize driver state
       let driverState = this.driverStates.get(driver)
       if (!driverState) {
-        driverState = { lastAngle: angle, totalProgress: angle }
+        driverState = {
+          lastAngle: angle,
+          lastDistance: hasDistance ? distance : 0,
+          totalProgress: hasDistance ? distance : angle,
+        }
         this.driverStates.set(driver, driverState)
       }
 
-      // Detect lap crossing: if we go from ~2π to ~0, we've crossed the finish
-      const angleDiff = angle - driverState.lastAngle
-      
-      if (angleDiff < -Math.PI) {
-        // Crossed finish line forward (from ~2π to ~0)
-        driverState.totalProgress += (angle + Math.PI * 2 - driverState.lastAngle)
-      } else if (angleDiff > Math.PI) {
-        // Crossed finish line backward (from ~0 to ~2π) - unlikely but handle it
-        driverState.totalProgress += (angle - Math.PI * 2 - driverState.lastAngle)
-      } else {
-        // Normal progression
-        driverState.totalProgress += angleDiff
-      }
+      if (hasDistance) {
+        const distanceDiff = distance - driverState.lastDistance
+        const wrapThreshold = this.trackLength * 0.5
 
-      driverState.lastAngle = angle
+        if (distanceDiff < -wrapThreshold) {
+          // Crossed start/finish forward (distance reset)
+          driverState.totalProgress += (this.trackLength - driverState.lastDistance) + distance
+        } else if (distanceDiff > wrapThreshold) {
+          // Crossed start/finish backward (unlikely)
+          driverState.totalProgress += distanceDiff - this.trackLength
+        } else {
+          driverState.totalProgress += distanceDiff
+        }
+
+        driverState.lastDistance = distance
+      } else {
+        // Detect lap crossing: if we go from ~2π to ~0, we've crossed the finish
+        const angleDiff = angle - driverState.lastAngle
+        
+        if (angleDiff < -Math.PI) {
+          // Crossed finish line forward (from ~2π to ~0)
+          driverState.totalProgress += (angle + Math.PI * 2 - driverState.lastAngle)
+        } else if (angleDiff > Math.PI) {
+          // Crossed finish line backward (from ~0 to ~2π) - unlikely but handle it
+          driverState.totalProgress += (angle - Math.PI * 2 - driverState.lastAngle)
+        } else {
+          // Normal progression
+          driverState.totalProgress += angleDiff
+        }
+
+        driverState.lastAngle = angle
+      }
 
       progresses.push({
         driver,

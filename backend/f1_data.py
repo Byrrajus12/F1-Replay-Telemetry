@@ -13,7 +13,7 @@ def get_qualifying_lap_data(year: int, round_num: int, driver_code: str = "VER")
         session = fastf1.get_session(year, round_num, "Q")
         session.load(telemetry=True, weather=False)
         
-        # Get the fastest lap for this driver in qualifying
+        # Get the fastest lap from qualifying
         driver_laps = session.laps.pick_driver(driver_code)
         if driver_laps.empty:
             raise ValueError(f"No laps found for driver {driver_code}")
@@ -34,9 +34,8 @@ def get_qualifying_lap_data(year: int, round_num: int, driver_code: str = "VER")
         
         # Get session info
         track_name = session.event["Location"]
-        circuit_length = session.event.get("Circuit Length") or 5891  # Default for Silverstone
+        circuit_length = session.event.get("Circuit Length") or 5891
         
-        # Convert telemetry to our format
         telemetry_points = []
         
         for idx, row in telemetry.iterrows():
@@ -50,7 +49,7 @@ def get_qualifying_lap_data(year: int, round_num: int, driver_code: str = "VER")
             if hasattr(row.name, 'total_seconds'):
                 t = row.name.total_seconds()
             else:
-                t = float(idx) * 0.1  # Approximate 10Hz sampling
+                t = float(idx) * 0.1
             
             # Speed in km/h
             s = float(row.get("Speed", 0)) if not np.isnan(row.get("Speed", 0)) else 0
@@ -119,17 +118,6 @@ def get_qualifying_lap_data(year: int, round_num: int, driver_code: str = "VER")
 
 
 def get_race_data(year: int, round_num: int, lap_limit: int = 3) -> dict:
-    """
-    Fetch race session data for ALL drivers with synchronized telemetry.
-    
-    Args:
-        year: Season year
-        round_num: Race round number
-        lap_limit: Number of laps to fetch (to avoid huge datasets)
-    
-    Returns:
-        Dictionary with race data for all drivers synchronized by time
-    """
     print(f"Fetching {year} Round {round_num} race data...")
     
     try:
@@ -210,7 +198,6 @@ def get_race_data(year: int, round_num: int, lap_limit: int = 3) -> dict:
                 print(f"Error processing driver {driver_num}: {e}")
                 continue
         
-        # Build response
         result = {
             "metadata": {
                 "source": "FastF1 Race Data",
@@ -232,17 +219,8 @@ def get_race_data(year: int, round_num: int, lap_limit: int = 3) -> dict:
         raise
 
 
-def fetch_and_save_silverstone(output_path: Optional[str] = None) -> dict:
-    """
-    Fetch Silverstone 2024 Q3 qualifying data and optionally save to JSON
-    
-    Args:
-        output_path: Path to save JSON file (if None, only returns dict)
-    
-    Returns:
-        Dictionary with telemetry data
-    """
-    # Silverstone 2024 is round 10
+def fetch_and_save_barcelona(output_path: Optional[str] = None) -> dict:
+    # Barcelona 2024 is round 10
     data = get_qualifying_lap_data(2024, 10, "VER")
     
     if output_path:
@@ -258,18 +236,6 @@ def fetch_and_save_silverstone(output_path: Optional[str] = None) -> dict:
 
 
 def fetch_and_save_race(year: int, round_num: int, lap_limit: int = 3, output_path: Optional[str] = None) -> dict:
-    """
-    Fetch race data for all drivers and optionally save to JSON
-    
-    Args:
-        year: Season year
-        round_num: Race round number
-        lap_limit: Number of laps to fetch per driver
-        output_path: Path to save JSON file (if None, only returns dict)
-    
-    Returns:
-        Dictionary with race data for all drivers
-    """
     data = get_race_data(year, round_num, lap_limit)
     
     if output_path:

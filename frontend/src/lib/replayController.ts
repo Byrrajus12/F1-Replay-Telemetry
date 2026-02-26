@@ -86,6 +86,7 @@ export class ReplayController {
         speed: a.speed + (b.speed - a.speed) * alpha,
         drs: a.drs,
         heading,
+        distance: a.distance + (b.distance - a.distance) * alpha,
       }
     }
 
