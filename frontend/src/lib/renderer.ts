@@ -1,16 +1,18 @@
 import * as PIXI from "pixi.js"
 import type { Application } from "pixi.js"
 import { Assets, Sprite } from "pixi.js"
-import type { RaceFrame } from "./types"
+import type { RaceFrame, RaceSessionData, TrackBoundary, TrackPoint } from "./types"
 import { generateMockRaceData } from "./mockData"
 import { ReplayController } from "./replayController"
 import { RankingEngine } from "./rankingEngine"
+import { processLapToTrack } from "./trackProcessor"
+import { buildRaceDataFromSession } from "./raceDataLoader"
 
 // TEAMS REGISTRY
 const TEAMS_REGISTRY: Record<string, { textureFile: string; scale: number }> = {
-  redbull: { textureFile: "/redbull2025.png", scale: 0.45 },
-  mercedes: { textureFile: "/mercedes2025.png", scale: 0.45 },
-  ferrari: { textureFile: "/ferrari2025.png", scale: 0.45 },
+  redbull: { textureFile: "/redbull2025.png", scale: 0.3 },
+  mercedes: { textureFile: "/mercedes2025.png", scale: 0.3 },
+  ferrari: { textureFile: "/ferrari2025.png", scale: 0.3 },
 }
 
 const DRIVER_TEAMS: Record<string, string> = {
@@ -26,6 +28,103 @@ const TEAM_TEXTURES: Record<string, PIXI.Texture> = {}
 async function initializeTeams(): Promise<void> {
   for (const [teamKey, config] of Object.entries(TEAMS_REGISTRY)) {
     TEAM_TEXTURES[teamKey] = await Assets.load(config.textureFile)
+  }
+}
+
+type TrackNormalizer = (pt: TrackPoint) => TrackPoint
+
+/**
+ * Build a normalization function to fit track bounds at world origin (0,0)
+ */
+function getTrackNormalizer(trackBoundary: TrackBoundary, targetRadiusX: number, targetRadiusY: number): TrackNormalizer {
+  const { xMin, xMax, yMin, yMax } = trackBoundary.bounds
+
+  // Calculate current bounds
+  const currentWidth = xMax - xMin
+  const currentHeight = yMax - yMin
+  const currentCenterX = (xMin + xMax) / 2
+  const currentCenterY = (yMin + yMax) / 2
+
+  // Calculate scale to fit target bounds
+  const scaleX = (targetRadiusX * 2 * 0.9) / currentWidth // 0.9 = 90% padding
+  const scaleY = (targetRadiusY * 2 * 0.9) / currentHeight
+  const scale = Math.min(scaleX, scaleY) // Uniform scaling
+
+  return (pt: TrackPoint): TrackPoint => ({
+    x: (pt.x - currentCenterX) * scale,
+    y: (pt.y - currentCenterY) * scale,
+  })
+}
+
+/**
+ * Normalize track to fit ellipse bounds at world origin (0,0)
+ */
+function normalizeTrack(trackBoundary: TrackBoundary, normalizePoint: TrackNormalizer): TrackBoundary {
+  const normalizedCenterLine = trackBoundary.centerLine.map(normalizePoint)
+  const normalizedInnerBoundary = trackBoundary.innerBoundary.map(normalizePoint)
+  const normalizedOuterBoundary = trackBoundary.outerBoundary.map(normalizePoint)
+
+  // Recalculate bounds
+  const allPoints = [...normalizedCenterLine, ...normalizedInnerBoundary, ...normalizedOuterBoundary]
+  let newXMin = allPoints[0].x
+  let newXMax = allPoints[0].x
+  let newYMin = allPoints[0].y
+  let newYMax = allPoints[0].y
+
+  for (const pt of allPoints) {
+    newXMin = Math.min(newXMin, pt.x)
+    newXMax = Math.max(newXMax, pt.x)
+    newYMin = Math.min(newYMin, pt.y)
+    newYMax = Math.max(newYMax, pt.y)
+  }
+
+  return {
+    centerLine: normalizedCenterLine,
+    innerBoundary: normalizedInnerBoundary,
+    outerBoundary: normalizedOuterBoundary,
+    drsZones: trackBoundary.drsZones,
+    bounds: {
+      xMin: newXMin,
+      xMax: newXMax,
+      yMin: newYMin,
+      yMax: newYMax,
+    },
+    trackName: trackBoundary.trackName,
+    trackLength: trackBoundary.trackLength,
+  }
+}
+
+/**
+ * Draw track boundaries with thick white lines
+ */
+function drawTrackBoundaries(graphics: PIXI.Graphics, trackBoundary: TrackBoundary): void {
+  const { innerBoundary, outerBoundary, drsZones } = trackBoundary
+  
+  if (outerBoundary.length < 2 || innerBoundary.length < 2) return
+
+  // Draw thick white outer boundary
+  graphics.moveTo(outerBoundary[0].x, outerBoundary[0].y)
+  for (let i = 1; i < outerBoundary.length; i++) {
+    graphics.lineTo(outerBoundary[i].x, outerBoundary[i].y)
+  }
+  graphics.lineTo(outerBoundary[0].x, outerBoundary[0].y)
+  graphics.stroke({ width: 12, color: 0xffffff })
+
+  // Draw thick white inner boundary
+  graphics.moveTo(innerBoundary[0].x, innerBoundary[0].y)
+  for (let i = 1; i < innerBoundary.length; i++) {
+    graphics.lineTo(innerBoundary[i].x, innerBoundary[i].y)
+  }
+  graphics.lineTo(innerBoundary[0].x, innerBoundary[0].y)
+  graphics.stroke({ width: 12, color: 0xffffff })
+
+  // Draw DRS zones in green on the outer boundary
+  for (const zone of drsZones) {
+    graphics.moveTo(outerBoundary[zone.startIndex].x, outerBoundary[zone.startIndex].y)
+    for (let i = zone.startIndex + 1; i <= zone.endIndex && i < outerBoundary.length; i++) {
+      graphics.lineTo(outerBoundary[i].x, outerBoundary[i].y)
+    }
+    graphics.stroke({ width: 12, color: 0x00ff00 })
   }
 }
 
@@ -55,24 +154,46 @@ export async function initRenderer(
   const world = new PIXI.Container()
   app.stage.addChild(world)
 
-  // TRACK
+  // TRACK - Load from JSON and normalize to fit ellipse bounds
   const radiusX = 300
   const radiusY = 200
+  
+  let normalizedTrack: TrackBoundary | null = null
+  let processedTrack: TrackBoundary | null = null
+  let normalizePoint: TrackNormalizer | null = null
+  const trackGraphics = new PIXI.Graphics()
 
-  const track = new PIXI.Graphics()
-  track
-    .ellipse(0, 0, radiusX, radiusY)
-    .stroke({ width: 6, color: 0xffffff })
+  try {
+    const barcelonaData = await import("./fixtures/barcelonaQualifyingLap.json")
+    processedTrack = processLapToTrack(barcelonaData)
+    normalizePoint = getTrackNormalizer(processedTrack, radiusX, radiusY)
+    normalizedTrack = normalizeTrack(processedTrack, normalizePoint)
+    drawTrackBoundaries(trackGraphics, normalizedTrack)
+  } catch (error) {
+    console.error("Failed to load track data, using fallback ellipse:", error)
+    trackGraphics.ellipse(0, 0, radiusX, radiusY).stroke({ width: 6, color: 0xffffff })
+  }
 
-  world.addChild(track)
+  world.addChild(trackGraphics)
 
-  // REPLAY
-  const raceData = generateMockRaceData()
+  // REPLAY - Use normalized track centerline
+  let raceData = normalizedTrack 
+    ? generateMockRaceData(normalizedTrack.centerLine)
+    : generateMockRaceData()
+
+  if (normalizedTrack && processedTrack && normalizePoint) {
+    try {
+      const raceSession = (await import("./fixtures/raceData.json")).default as RaceSessionData
+      raceData = buildRaceDataFromSession(raceSession, normalizePoint)
+    } catch (error) {
+      console.warn("Failed to load race data, using mock data:", error)
+    }
+  }
   const replay = new ReplayController(raceData)
   replay.play()
 
   // RANKING ENGINE
-  const ranking = new RankingEngine()
+  const ranking = new RankingEngine(normalizedTrack?.trackLength ?? 0)
 
   // CARS
   const carMap = new Map<string, Sprite>()
