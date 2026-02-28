@@ -13,12 +13,36 @@ const TEAMS_REGISTRY: Record<string, { textureFile: string; scale: number }> = {
   redbull: { textureFile: "/redbull2025.png", scale: 0.3 },
   mercedes: { textureFile: "/mercedes2025.png", scale: 0.3 },
   ferrari: { textureFile: "/ferrari2025.png", scale: 0.3 },
+  mclaren: { textureFile: "/mclaren2025.png", scale: 0.3 },
+  aston: { textureFile: "/aston2025.png", scale: 0.3 },
+  alpine: { textureFile: "/alpine2025.png", scale: 0.3 },
+  williams: { textureFile: "/williams2025.png", scale: 0.3 },
+  haas: { textureFile: "/haas2025.png", scale: 0.3 },
+  sauber: { textureFile: "/sauber2025.png", scale: 0.3 },
+  rb: { textureFile: "/rb2025.png", scale: 0.3 },
 }
 
 const DRIVER_TEAMS: Record<string, string> = {
   VER: "redbull",
+  PER: "redbull",
   HAM: "mercedes",
+  RUS: "mercedes",
   LEC: "ferrari",
+  SAI: "ferrari",
+  NOR: "mclaren",
+  PIA: "mclaren",
+  ALO: "aston",
+  STR: "aston",
+  OCO: "alpine",
+  GAS: "alpine",
+  ALB: "williams",
+  SAR: "williams",
+  MAG: "haas",
+  HUL: "haas",
+  ZHO: "sauber",
+  BOT: "sauber",
+  TSU: "rb",
+  RIC: "rb",
 }
 
 // LOADED TEXTURES
@@ -27,7 +51,11 @@ const TEAM_TEXTURES: Record<string, PIXI.Texture> = {}
 // Initialize team textures
 async function initializeTeams(): Promise<void> {
   for (const [teamKey, config] of Object.entries(TEAMS_REGISTRY)) {
-    TEAM_TEXTURES[teamKey] = await Assets.load(config.textureFile)
+    try {
+      TEAM_TEXTURES[teamKey] = await Assets.load(config.textureFile)
+    } catch {
+      console.log(`Texture not found for team ${teamKey}: ${config.textureFile} - driver will not be rendered`)
+    }
   }
 }
 
@@ -203,16 +231,24 @@ export async function initRenderer(
   const flashTimers = new Map<string, number>()
   const FLASH_DURATION = 0.4 // seconds
 
-  function ensureCar(driverCode: string): Sprite {
+  function ensureCar(driverCode: string): Sprite | null {
     if (carMap.has(driverCode)) {
       return carMap.get(driverCode)!
     }
 
     // Data-driven: look up team from registry
-    const teamKey = DRIVER_TEAMS[driverCode] || "mercedes" // fallback to mercedes
+    const teamKey = DRIVER_TEAMS[driverCode]
+    if (!teamKey) {
+      console.warn(`No team mapping for driver ${driverCode}`)
+      return null
+    }
     const texture = TEAM_TEXTURES[teamKey]
-    const scale = TEAMS_REGISTRY[teamKey].scale
+    if (!texture) {
+      console.log(`No texture loaded for team ${teamKey} (driver ${driverCode}) - skipping render`)
+      return null
+    }
 
+    const scale = TEAMS_REGISTRY[teamKey].scale
     const sprite = new Sprite(texture)
 
     sprite.anchor.set(0.5)
@@ -229,6 +265,9 @@ export async function initRenderer(
     for (const driverCode in frame) {
       const state = frame[driverCode]
       const car = ensureCar(driverCode)
+
+      // Skip if no texture available for this driver
+      if (!car) continue
 
       car.position.set(state.x, state.y)
       car.rotation = state.heading + SPRITE_ROTATION_OFFSET
